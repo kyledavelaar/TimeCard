@@ -1,19 +1,30 @@
-import java.time.*;
-import java.time.format.*;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.awt.Color;
+import java.util.prefs.*;
 
 public class ClockIn extends javax.swing.JFrame {
+    private Preferences prefs;
     private Boolean isClockedIn = false;
     long clockedInTime = 0;
     long timeWorkedToday = 0;
+    long timeWorkedInWeek = 0;
 
     public ClockIn() {
         initComponents();
         setInterval(1000);
+        prefs = Preferences.userNodeForPackage(this.getClass());
+        getPrefs(prefs);
+        String hoursForDay = getHoursMinutesFromMs(timeWorkedToday);
+        dayHours.setText(hoursForDay);
+        String hoursForWeek = getHoursMinutesFromMs(timeWorkedInWeek);
+        weekHours.setText(hoursForWeek);
+        if (clockedInTime == 0) {
+            clockInOutAtLabel.setText("Currently clocked out");
+            clockInOutAtTime.setText("");
+        }
     }
 
     /**
@@ -134,6 +145,11 @@ public class ClockIn extends javax.swing.JFrame {
         pack();
     }// </editor-fold>
 
+    void getPrefs(Preferences prefs) {
+        timeWorkedToday = prefs.getLong("timeWorkedToday", 0);
+        timeWorkedInWeek = prefs.getLong("timeWorkedInWeek", 0);
+    }
+
     static long getCurrentTime() {
         return System.currentTimeMillis();
     }
@@ -144,9 +160,11 @@ public class ClockIn extends javax.swing.JFrame {
             public void run(){
                 if (isClockedIn) {
                     long time = getCurrentTime();
-                    long diff = getDiffFromTimes(time, clockedInTime) + timeWorkedToday;
-                    String hours = getHoursMinutesFromMs(diff);
-                    dayHours.setText(hours);
+                    long diff = getDiffFromTimes(time, clockedInTime);
+                    String hoursToday = getHoursMinutesFromMs(diff + timeWorkedToday);
+                    String hoursWeek = getHoursMinutesFromMs(diff + timeWorkedInWeek);
+                    dayHours.setText(hoursToday);
+                    weekHours.setText(hoursWeek);
                 }
             }
         },0, interval);
@@ -194,8 +212,13 @@ public class ClockIn extends javax.swing.JFrame {
             clockInOutAtLabel.setText("Clocked Out at:");
             long diff = getDiffFromTimes(time, clockedInTime);
             timeWorkedToday += diff;
-            String hours = getHoursMinutesFromMs(timeWorkedToday);
-            dayHours.setText(hours);
+            timeWorkedInWeek += diff;
+            prefs.putLong("timeWorkedToday", timeWorkedToday);
+            prefs.putLong("timeWorkedInWeek", timeWorkedInWeek);
+            String hoursToday = getHoursMinutesFromMs(timeWorkedToday);
+            String hoursWeek = getHoursMinutesFromMs(timeWorkedInWeek);
+            dayHours.setText(hoursToday);
+            weekHours.setText(hoursWeek);
         }
 
     }
