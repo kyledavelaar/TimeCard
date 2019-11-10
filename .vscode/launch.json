@@ -1,0 +1,11 @@
+{
+  "configurations": [
+    {
+      "type": "java",
+      "name": "CodeLens (Launch) - ClockIn",
+      "request": "launch",
+      "mainClass": "ClockIn",
+      "projectName": "TimeCard_8577ebfa"
+    }
+  ]
+}
