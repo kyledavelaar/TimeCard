@@ -1,4 +1,4 @@
-Clock In / Clock Out Desktop App
+# Clock In / Clock Out Desktop App
 
 ## FEATURES
 - calculates how many hours worked each day and week
