@@ -1,30 +1,34 @@
+import com.google.gson.*;
+import com.google.gson.reflect.*;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.awt.Color;
 import java.util.prefs.*;
+import java.time.*;
+
 
 public class ClockIn extends javax.swing.JFrame {
-    private Preferences prefs;
+    private static Preferences prefs;
+    static HashMap<Integer, ArrayList<Long>> hourLog = new HashMap<Integer, ArrayList<Long>>();
     private Boolean isClockedIn = false;
     long clockedInTime = 0;
     long timeWorkedToday = 0;
     long timeWorkedInWeek = 0;
+    static Gson gson = new Gson();
 
     public ClockIn() {
         initComponents();
         setInterval(1000);
         prefs = Preferences.userNodeForPackage(this.getClass());
         getPrefs(prefs);
-        String hoursForDay = getHoursMinutesFromMs(timeWorkedToday);
-        dayHours.setText(hoursForDay);
-        String hoursForWeek = getHoursMinutesFromMs(timeWorkedInWeek);
-        weekHours.setText(hoursForWeek);
+        setLocalStateFromPrefs();
         if (clockedInTime == 0) {
             clockInOutAtLabel.setText("Currently clocked out");
             clockInOutAtTime.setText("");
         }
+
     }
 
     /**
@@ -148,6 +152,22 @@ public class ClockIn extends javax.swing.JFrame {
     void getPrefs(Preferences prefs) {
         timeWorkedToday = prefs.getLong("timeWorkedToday", 0);
         timeWorkedInWeek = prefs.getLong("timeWorkedInWeek", 0);
+        String log = prefs.get("hourLog", "noSavedHourLog");
+        if (log == "noSavedHourLog") {
+            initializeHourLog();
+        } else {
+            java.lang.reflect.Type type = new TypeToken<HashMap<Integer, ArrayList<Long>>>(){}.getType();
+            hourLog = gson.fromJson(log, type);
+        }
+        printHourLog();
+
+    }
+
+    void setLocalStateFromPrefs() {
+        String hoursForDay = getHoursMinutesFromMs(timeWorkedToday);
+        dayHours.setText(hoursForDay);
+        String hoursForWeek = getHoursMinutesFromMs(timeWorkedInWeek);
+        weekHours.setText(hoursForWeek);
     }
 
     static long getCurrentTime() {
@@ -170,8 +190,8 @@ public class ClockIn extends javax.swing.JFrame {
         },0, interval);
     }
 
-    static Date getDateFromMS(long ms) {
-        return new Date(ms);
+    static ZonedDateTime getDateFromMS(long ms) {
+        return ZonedDateTime.ofInstant(Instant.ofEpochMilli(ms), ZoneId.systemDefault());
     }
 
     static long getMSFromDate(Date date) {
@@ -190,17 +210,53 @@ public class ClockIn extends javax.swing.JFrame {
         );
     }
 
+    static int[] getHoursMinutesFromDate(ZonedDateTime date) {
+        int[] a = { date.getHour(), date.getMinute() };
+        return a;
+    }
+
     static String formatDate(Date date) {
-        DateFormat df = new SimpleDateFormat("dd:MM:yy:HH:mm:ss");
+        DateFormat df = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
         return df.format(date);
     }
 
+//    static void addTime(Integer day) {
+//        ArrayList<Long> l = new ArrayList<Long>();
+//        hourLog.put(day, l);
+//    }
+
+    static void addTimeToLog(int day, long ms) {
+        ArrayList<Long> times = hourLog.get(day);
+        times.add(ms);
+        prefs.put("hourLog", gson.toJson(hourLog)); // put in hook when app closes
+    }
+
+    static void updateHourLog(int day, long ms, int index) {
+        ArrayList<Long> times = hourLog.get(day);
+        times.set(index, ms);
+    }
+
+    static void initializeHourLog() {
+        for (int i = 1; i < 8; i++) {
+            ArrayList<Long> l = new ArrayList<Long>();
+            hourLog.put(i, l);
+        }
+    }
+
+    static void printHourLog() {
+         hourLog.forEach((k, v) -> {
+            System.out.println(k + ": " + v);
+        });
+    }
 
     private void clockinBtnActionPerformed(java.awt.event.ActionEvent evt) {
         isClockedIn = !isClockedIn;
         long time = getCurrentTime();
-        String date = getDateFromMS(time).toString();
-        clockInOutAtTime.setText(date);
+        ZonedDateTime date = getDateFromMS(time);
+        clockInOutAtTime.setText(date.toString());
+        int day = date.getDayOfWeek().getValue();
+        addTimeToLog(day, time);
+        printHourLog();
         if (isClockedIn) {
             clockedInTime = time;
             clockinBtn.setText("CLOCK OUT");
@@ -255,8 +311,13 @@ public class ClockIn extends javax.swing.JFrame {
         /* Create and display the form */
         java.awt.EventQueue.invokeLater(new Runnable() {
             public void run() {
-                new ClockIn().setVisible(true);
-
+                ClockIn c = new ClockIn();
+                c.setVisible(true);
+//                c.addWindowListener(new WindowAdapter() {
+//                    public void windowClosing(WindowEvent e) {System.exit(0);}
+//                    public void windowDeiconified(WindowEvent e) { demo.open(); }
+//                    public void windowIconified(WindowEvent e) { demo.close(); }
+//                });
             }
         });
     }
