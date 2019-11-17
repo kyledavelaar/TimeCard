@@ -7,12 +7,15 @@ import java.text.SimpleDateFormat;
 import java.awt.Color;
 import java.util.prefs.*;
 import java.time.*;
+import java.io.IOException;
+import java.io.FileWriter;
 
 
 public class ClockIn extends javax.swing.JFrame {
     private static Preferences prefs;
     static HashMap<Integer, ArrayList<Long>> hourLog = new HashMap<Integer, ArrayList<Long>>();
     private Boolean isClockedIn = false;
+    long lastActiveDate = getCurrentTime();
     long clockedInTime = 0;
     long timeWorkedToday = 0;
     long timeWorkedInWeek = 0;
@@ -23,11 +26,24 @@ public class ClockIn extends javax.swing.JFrame {
         setInterval(1000);
         prefs = Preferences.userNodeForPackage(this.getClass());
         getPrefs(prefs);
-        setLocalStateFromPrefs();
+        reconcileLastActiveDate();
+        setUIStateFromPrefs();
         if (clockedInTime == 0) {
             clockInOutAtLabel.setText("Currently clocked out");
             clockInOutAtTime.setText("");
         }
+
+
+        Runtime.getRuntime().addShutdownHook(new Thread() {
+            @Override
+            public void run() {
+                prefs.put("hourLog", gson.toJson(hourLog));
+                prefs.putLong("lastActiveDate", lastActiveDate);
+                prefs.putLong("timeWorkedToday", timeWorkedToday);
+                prefs.putLong("timeWorkedInWeek", timeWorkedInWeek);
+            }
+
+        });
 
     }
 
@@ -152,6 +168,7 @@ public class ClockIn extends javax.swing.JFrame {
     void getPrefs(Preferences prefs) {
         timeWorkedToday = prefs.getLong("timeWorkedToday", 0);
         timeWorkedInWeek = prefs.getLong("timeWorkedInWeek", 0);
+        lastActiveDate = prefs.getLong("lastActiveDate", 0);
         String log = prefs.get("hourLog", "noSavedHourLog");
         if (log == "noSavedHourLog") {
             initializeHourLog();
@@ -163,11 +180,60 @@ public class ClockIn extends javax.swing.JFrame {
 
     }
 
-    void setLocalStateFromPrefs() {
+    void setUIStateFromPrefs() {
         String hoursForDay = getHoursMinutesFromMs(timeWorkedToday);
         dayHours.setText(hoursForDay);
         String hoursForWeek = getHoursMinutesFromMs(timeWorkedInWeek);
         weekHours.setText(hoursForWeek);
+    }
+
+    Boolean isSameDate(ZonedDateTime date1, ZonedDateTime date2) {
+        String a = date1.toString().substring(0, 10);
+        String b = date2.toString().substring(0, 10);
+        return a.equals(b);
+    }
+
+    void reconcileLastActiveDate() {
+        ZonedDateTime currentDate = getDateFromMS(getCurrentTime());
+        ZonedDateTime dateProcessing = getDateFromMS(lastActiveDate);
+        while (!isSameDate(dateProcessing, currentDate)) {
+            dateProcessing = getDateFromMS(lastActiveDate).plusDays(1);
+            timeWorkedToday = 0;
+
+            if (dateProcessing.getDayOfWeek().getValue() == 1) { // Monday
+                System.out.println("monday");
+                timeWorkedInWeek = 0;
+                writeLogToCSV(dateProcessing);
+                initializeHourLog();
+            }
+        }
+
+    }
+
+     static void writeLogToCSV(ZonedDateTime date) {
+        try {
+            FileWriter pw = new FileWriter("hourLog.csv", true);
+            ZonedDateTime d = date.minusWeeks(1);
+
+            for (Map.Entry<Integer, ArrayList<Long>> entry : hourLog.entrySet()) {
+                // Integer k = entry.getKey();
+                ArrayList<Long> v = entry.getValue();
+                StringBuilder sb = new StringBuilder();
+                sb.append(d.toString().substring(0, 10) + ",");
+                for (int i = 0; i < v.size(); i++) {
+                    int[] hm = getHoursMinutesFromDate(getDateFromMS(v.get(i)));
+                    String status = i % 2 == 0 ? "IN: " : "OUT: ";
+                    sb.append(status + hm[0] + ":" + hm[1] + ",");
+                }
+                sb.append('\n');
+                pw.write(sb.toString());
+                d = d.plusDays(1);
+            }
+            pw.close();
+        } catch (IOException e) {
+            e.printStackTrace();
+            System.out.println(e.getMessage());
+        }
     }
 
     static long getCurrentTime() {
@@ -185,6 +251,8 @@ public class ClockIn extends javax.swing.JFrame {
                     String hoursWeek = getHoursMinutesFromMs(diff + timeWorkedInWeek);
                     dayHours.setText(hoursToday);
                     weekHours.setText(hoursWeek);
+                    // TODO: if midnight, clock out and clock back in
+                    // (what about reconcile ? what if sunday to monday? close app too?)
                 }
             }
         },0, interval);
@@ -220,15 +288,9 @@ public class ClockIn extends javax.swing.JFrame {
         return df.format(date);
     }
 
-//    static void addTime(Integer day) {
-//        ArrayList<Long> l = new ArrayList<Long>();
-//        hourLog.put(day, l);
-//    }
-
     static void addTimeToLog(int day, long ms) {
         ArrayList<Long> times = hourLog.get(day);
         times.add(ms);
-        prefs.put("hourLog", gson.toJson(hourLog)); // put in hook when app closes
     }
 
     static void updateHourLog(int day, long ms, int index) {
@@ -252,6 +314,7 @@ public class ClockIn extends javax.swing.JFrame {
     private void clockinBtnActionPerformed(java.awt.event.ActionEvent evt) {
         isClockedIn = !isClockedIn;
         long time = getCurrentTime();
+        lastActiveDate = time;
         ZonedDateTime date = getDateFromMS(time);
         clockInOutAtTime.setText(date.toString());
         int day = date.getDayOfWeek().getValue();
@@ -269,8 +332,6 @@ public class ClockIn extends javax.swing.JFrame {
             long diff = getDiffFromTimes(time, clockedInTime);
             timeWorkedToday += diff;
             timeWorkedInWeek += diff;
-            prefs.putLong("timeWorkedToday", timeWorkedToday);
-            prefs.putLong("timeWorkedInWeek", timeWorkedInWeek);
             String hoursToday = getHoursMinutesFromMs(timeWorkedToday);
             String hoursWeek = getHoursMinutesFromMs(timeWorkedInWeek);
             dayHours.setText(hoursToday);
@@ -278,6 +339,8 @@ public class ClockIn extends javax.swing.JFrame {
         }
 
     }
+
+
 
     /**
      * @param args the command line arguments
@@ -313,11 +376,6 @@ public class ClockIn extends javax.swing.JFrame {
             public void run() {
                 ClockIn c = new ClockIn();
                 c.setVisible(true);
-//                c.addWindowListener(new WindowAdapter() {
-//                    public void windowClosing(WindowEvent e) {System.exit(0);}
-//                    public void windowDeiconified(WindowEvent e) { demo.open(); }
-//                    public void windowIconified(WindowEvent e) { demo.close(); }
-//                });
             }
         });
     }

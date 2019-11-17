@@ -24,6 +24,19 @@
     - reset timeWorkedInWeek = 0
     - clear saved values for that weeks clock in/out
 
+
+    - save lastActiveDate (last time clockedIn/out) so can see how many days have passed since that date
+    - when start app
+      - if lastActiveDate == todaysDate (yy-MM-dd): do nothing
+      - else
+        - loop through days from lastActiveDate until now
+          - if day === monday
+            - timeWorkedInWeek = 0;
+            - put hourLog dates into csv;
+            - resetHourLog;
+          - else
+            - do nothing?
+
   - user closes app without logging out
     - before close:
       - if clockedIn
